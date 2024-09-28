@@ -3,14 +3,15 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"strings"
+	"time"
+
 	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
 	i "github.com/emersion/go-imap"
 	m "github.com/emersion/go-message/mail"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/loeffel-io/mail-downloader/counter"
-	"io"
-	"io/ioutil"
-	"time"
 )
 
 type mail struct {
@@ -47,7 +48,6 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 
 	for {
 		part, err := reader.NextPart()
-
 		if err != nil {
 			if err == io.EOF || err.Error() == "multipart: NextPart: EOF" {
 				break
@@ -58,8 +58,7 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 
 		switch header := part.Header.(type) {
 		case *m.InlineHeader:
-			body, err := ioutil.ReadAll(part.Body)
-
+			body, err := io.ReadAll(part.Body)
 			if err != nil {
 				if err == io.ErrUnexpectedEOF {
 					continue
@@ -72,13 +71,11 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 		case *m.AttachmentHeader:
 			// This is an attachment
 			filename, err := header.Filename()
-
 			if err != nil {
 				return err
 			}
 
-			body, err := ioutil.ReadAll(part.Body)
-
+			body, err := io.ReadAll(part.Body)
 			if err != nil {
 				return err
 			}
@@ -90,6 +87,9 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 			}
 
 			filename = new(imap).fixUtf(filename)
+
+			// Replace all slashes with dashes to prevent directory traversal
+			filename = strings.ReplaceAll(filename, "/", "-")
 
 			attachments = append(attachments, &attachment{
 				Filename: filename,
@@ -106,10 +106,9 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 }
 
 func (mail *mail) generatePdf() ([]byte, error) {
-	var count = counter.CreateCounter()
+	count := counter.CreateCounter()
 
 	pdfg, err := wkhtmltopdf.NewPDFGenerator()
-
 	if err != nil {
 		return nil, err
 	}

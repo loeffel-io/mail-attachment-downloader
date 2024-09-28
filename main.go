@@ -3,14 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/cheggaaa/pb/v3"
-	"github.com/loeffel-io/mail-downloader/search"
-	"gopkg.in/yaml.v3"
-	"io/ioutil"
 	"log"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/cheggaaa/pb/v3"
+	"github.com/loeffel-io/mail-downloader/search"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -23,15 +23,13 @@ func main() {
 	flag.Parse()
 
 	// yaml
-	yamlBytes, err := ioutil.ReadFile(*configPath)
-
+	yamlBytes, err := os.ReadFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// yaml to config
 	err = yaml.Unmarshal(yamlBytes, &config)
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,26 +54,22 @@ func main() {
 
 	// Mailbox
 	_, err = imap.selectMailbox("INBOX")
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// search uids
 	fromDate, err := time.Parse("2006-01-02", *from) // yyyy-MM-dd ISO 8601
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	toDate, err := time.Parse("2006-01-02", *to) // yyyy-MM-dd ISO 8601
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	uids, err := imap.search(fromDate, toDate)
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,7 +78,7 @@ func main() {
 	seqset := imap.createSeqSet(uids)
 
 	// channel
-	var mailsChan = make(chan *mail)
+	mailsChan := make(chan *mail)
 
 	// fetch messages
 	go func() {
@@ -142,7 +136,8 @@ func main() {
 				log.Fatal(err)
 			}
 
-			if err = ioutil.WriteFile(fmt.Sprintf("%s/%s", dir, attachment.Filename), attachment.Body, 0644); err != nil {
+			if err = os.WriteFile(fmt.Sprintf("%s/%s", dir, attachment.Filename), attachment.Body, 0o644); err != nil {
+				log.Printf("attachment.Filename: %s", attachment.Filename)
 				if pe, ok := err.(*os.PathError); ok {
 					if pe.Err == syscall.ENAMETOOLONG {
 						log.Println(err.Error())
@@ -165,7 +160,6 @@ func main() {
 		}
 
 		bytes, err := mail.generatePdf()
-
 		if err != nil {
 			log.Println(err.Error())
 			bar.Increment()
@@ -181,7 +175,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		if err = ioutil.WriteFile(fmt.Sprintf("%s/mail-%d.pdf", dir, mail.Uid), bytes, 0644); err != nil {
+		if err = os.WriteFile(fmt.Sprintf("%s/mail-%d.pdf", dir, mail.Uid), bytes, 0o644); err != nil {
 			log.Fatal(err)
 		}
 

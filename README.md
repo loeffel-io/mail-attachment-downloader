@@ -1,9 +1,9 @@
 # Mail Downloader
 
-[![Build Status](https://ci.loeffel.io/api/badges/loeffel-io/mail-downloader/status.svg)](https://ci.loeffel.io/loeffel-io/mail-downloader)
 [![Go Report Card](https://goreportcard.com/badge/github.com/loeffel-io/mail-downloader)](https://goreportcard.com/report/github.com/loeffel-io/mail-downloader)
 
-Download attachments and mails as pdf through useful filters
+Download attachments and mails as pdf through useful filters.
+Years later, this tool is still a thing. I use it every month to download all my invoices from my mail accounts since years.
 
 <img src="https://raw.githubusercontent.com/loeffel-io/mail-downloader/master/preview.gif" alt="preview" width="800">
 
@@ -55,3 +55,4 @@ files
         ├── facebook.com
             │── invoice.pdf
 ```
+
