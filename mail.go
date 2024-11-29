@@ -1,18 +1,22 @@
 package main
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
 	i "github.com/emersion/go-imap"
 	m "github.com/emersion/go-message/mail"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/loeffel-io/mail-downloader/counter"
+	"github.com/luabagg/orcgen/v2"
+	"github.com/luabagg/orcgen/v2/pkg/fileinfo"
+	"github.com/luabagg/orcgen/v2/pkg/handlers"
 )
+
+var ErrNoHtmlBody = errors.New("no html body found")
 
 type mail struct {
 	Uid         uint32
@@ -105,40 +109,30 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 	return nil
 }
 
-func (mail *mail) generatePdf() ([]byte, error) {
-	count := counter.CreateCounter()
-
-	pdfg, err := wkhtmltopdf.NewPDFGenerator()
-	if err != nil {
-		return nil, err
-	}
-
-	pdfg.LowQuality.Set(true)
-	pdfg.Orientation.Set(wkhtmltopdf.OrientationPortrait)
-	pdfg.PageSize.Set(wkhtmltopdf.PageSizeA4)
-
+func (mail *mail) generatePdf(pdfGen handlers.FileHandler[orcgen.PDFConfig]) (*fileinfo.Fileinfo, error) {
+	var htmlBody []byte
+	var textBody []byte
 	for _, body := range mail.Body {
-		if mime := mimetype.Detect(body); !mime.Is("text/html") {
+		mime := mimetype.Detect(body)
+		switch {
+		case mime.Is("text/html"):
+			htmlBody = append(htmlBody, body...)
+		case mime.Is("text/plain"):
+			textBody = append(textBody, body...)
+		default:
 			continue
 		}
-
-		page := wkhtmltopdf.NewPageReader(bytes.NewReader(body))
-		page.DisableJavascript.Set(true)
-		page.Encoding.Set("UTF-8")
-
-		pdfg.AddPage(page)
-		count.Next()
 	}
 
-	if count.Current() == 0 {
-		return nil, nil
+	if len(htmlBody) != 0 {
+		return orcgen.ConvertHTML(pdfGen, htmlBody)
 	}
 
-	if err := pdfg.Create(); err != nil {
-		return nil, err
+	if len(textBody) != 0 {
+		return orcgen.ConvertHTML(pdfGen, textBody)
 	}
 
-	return pdfg.Bytes(), nil
+	return nil, ErrNoHtmlBody
 }
 
 func (mail *mail) getDirectoryName(username string) string {

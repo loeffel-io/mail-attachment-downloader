@@ -10,8 +10,16 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/loeffel-io/mail-downloader/search"
+	"github.com/luabagg/orcgen/v2"
 	"gopkg.in/yaml.v3"
 )
+
+type PdfError struct {
+	From    string
+	Date    time.Time
+	Subject string
+	Err     error
+}
 
 func main() {
 	var config *Config
@@ -69,6 +77,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	pdfGen := orcgen.NewHandler(orcgen.PDFConfig{
+		Landscape:         false,
+		PrintBackground:   true,
+		PreferCSSPageSize: true,
+	})
+	pdfGen.SetFullPage(true)
+
 	uids, err := imap.search(fromDate, toDate)
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +105,7 @@ func main() {
 	}()
 
 	// start bar
-	fmt.Println("Fetching messages...")
+	fmt.Printf("%s: fetching messages...\n", imap.Username)
 	bar := pb.StartNew(len(uids))
 
 	// mails
@@ -108,10 +123,11 @@ func main() {
 	}
 
 	// start bar
-	fmt.Println("Processing messages...")
+	fmt.Printf("%s: processing messages...\n", imap.Username)
 	bar.SetCurrent(0)
 
 	// process messages
+	var pdfErrors []*PdfError
 	for _, mail := range mails {
 		dir := mail.getDirectoryName(imap.Username)
 
@@ -159,27 +175,47 @@ func main() {
 			continue
 		}
 
-		bytes, err := mail.generatePdf()
+		fileInfo, err := mail.generatePdf(pdfGen)
 		if err != nil {
-			log.Println(err.Error())
-			bar.Increment()
-			continue
-		}
-
-		if bytes == nil {
-			bar.Increment()
-			continue
+			switch err {
+			case ErrNoHtmlBody:
+				pdfErrors = append(pdfErrors, &PdfError{
+					From:    mail.From[0].Address(),
+					Date:    mail.Date,
+					Subject: mail.Subject,
+					Err:     err,
+				})
+				bar.Increment()
+				continue
+			default:
+				pdfErrors = append(pdfErrors, &PdfError{
+					From:    mail.From[0].Address(),
+					Date:    mail.Date,
+					Subject: mail.Subject,
+					Err:     err,
+				})
+				bar.Increment()
+				continue
+			}
 		}
 
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			log.Fatal(err)
 		}
 
-		if err = os.WriteFile(fmt.Sprintf("%s/mail-%d.pdf", dir, mail.Uid), bytes, 0o644); err != nil {
+		if err := os.WriteFile(fmt.Sprintf("%s/mail-%d.pdf", dir, mail.Uid), fileInfo.File, 0o644); err != nil {
 			log.Fatal(err)
 		}
 
 		bar.Increment()
+	}
+
+	if len(pdfErrors) > 0 {
+		fmt.Printf("%s: found some errors\n", imap.Username)
+
+		for _, pdfError := range pdfErrors {
+			fmt.Printf("%s - %s - %s - %s\n", pdfError.From, pdfError.Date, pdfError.Subject, pdfError.Err.Error())
+		}
 	}
 
 	// done

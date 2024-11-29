@@ -7,10 +7,6 @@ Years later, this tool is still a thing. I use it every month to download all my
 
 <img src="https://raw.githubusercontent.com/loeffel-io/mail-downloader/master/preview.gif" alt="preview" width="800">
 
-### Requirements
-
-- [wkhtmltopdf](https://wkhtmltopdf.org/downloads.html)
-
 ### Usage
 
 ```bash
@@ -55,4 +51,3 @@ files
         ├── facebook.com
             │── invoice.pdf
 ```
-
