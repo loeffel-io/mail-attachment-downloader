@@ -1,4 +1,4 @@
-package main
+package mail
 
 import (
 	"errors"
@@ -6,11 +6,12 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	i "github.com/emersion/go-imap"
-	m "github.com/emersion/go-message/mail"
+	goimap "github.com/emersion/go-imap"
+	gomessage "github.com/emersion/go-message/mail"
 	"github.com/gabriel-vasile/mimetype"
-	"github.com/loeffel-io/mail-downloader/counter"
+	"github.com/google/uuid"
 	"github.com/luabagg/orcgen/v2"
 	"github.com/luabagg/orcgen/v2/pkg/fileinfo"
 	"github.com/luabagg/orcgen/v2/pkg/handlers"
@@ -18,11 +19,11 @@ import (
 
 var ErrNoHtmlBody = errors.New("no html body found")
 
-type mail struct {
+type Mail struct {
 	Uid         uint32
 	MessageID   string
 	Subject     string
-	From        []*i.Address
+	From        []*goimap.Address
 	Date        time.Time
 	Body        [][]byte
 	Attachments []*attachment
@@ -35,7 +36,7 @@ type attachment struct {
 	Mimetype string
 }
 
-func (mail *mail) fetchMeta(message *i.Message) {
+func (mail *Mail) FetchMeta(message *goimap.Message) {
 	mail.Uid = message.Uid
 	mail.MessageID = message.Envelope.MessageId
 	mail.Subject = message.Envelope.Subject
@@ -43,11 +44,10 @@ func (mail *mail) fetchMeta(message *i.Message) {
 	mail.Date = message.Envelope.Date
 }
 
-func (mail *mail) fetchBody(reader *m.Reader) error {
+func (mail *Mail) FetchBody(reader *gomessage.Reader) error {
 	var (
 		bodies      [][]byte
 		attachments []*attachment
-		count       = counter.CreateCounter()
 	)
 
 	for {
@@ -61,7 +61,7 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 		}
 
 		switch header := part.Header.(type) {
-		case *m.InlineHeader:
+		case *gomessage.InlineHeader:
 			body, err := io.ReadAll(part.Body)
 			if err != nil {
 				if err == io.ErrUnexpectedEOF {
@@ -72,7 +72,7 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 			}
 
 			bodies = append(bodies, body)
-		case *m.AttachmentHeader:
+		case *gomessage.AttachmentHeader:
 			// This is an attachment
 			filename, err := header.Filename()
 			if err != nil {
@@ -87,10 +87,10 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 			mime := mimetype.Detect(body)
 
 			if filename == "" {
-				filename = fmt.Sprintf("%d-%d%s", mail.Uid, count.Next(), mime.Extension())
+				filename = fmt.Sprintf("%d-%s%s", mail.Uid, uuid.New(), mime.Extension())
 			}
 
-			filename = new(imap).fixUtf(filename)
+			filename = fixUtf(filename)
 
 			// Replace all slashes with dashes to prevent directory traversal
 			filename = strings.ReplaceAll(filename, "/", "-")
@@ -109,7 +109,7 @@ func (mail *mail) fetchBody(reader *m.Reader) error {
 	return nil
 }
 
-func (mail *mail) generatePdf(pdfGen handlers.FileHandler[orcgen.PDFConfig]) (*fileinfo.Fileinfo, error) {
+func (mail *Mail) GeneratePdf(pdfGen handlers.FileHandler[orcgen.PDFConfig]) (*fileinfo.Fileinfo, error) {
 	var htmlBody []byte
 	var textBody []byte
 	for _, body := range mail.Body {
@@ -135,13 +135,25 @@ func (mail *mail) generatePdf(pdfGen handlers.FileHandler[orcgen.PDFConfig]) (*f
 	return nil, ErrNoHtmlBody
 }
 
-func (mail *mail) getDirectoryName(username string) string {
+func (mail *Mail) GetDirectoryName(username string) string {
 	return fmt.Sprintf(
 		"files/%s/%s-%d/%s",
 		username, mail.Date.Month(), mail.Date.Year(), mail.From[0].HostName,
 	)
 }
 
-func (mail *mail) getErrorText() string {
+func (mail *Mail) GetErrorText() string {
 	return fmt.Sprintf("Error: %s\nSubject: %s\nFrom: %s\n", mail.Error.Error(), mail.Subject, mail.Date)
+}
+
+func fixUtf(str string) string {
+	callable := func(r rune) rune {
+		if r == utf8.RuneError {
+			return -1
+		}
+
+		return r
+	}
+
+	return strings.Map(callable, str)
 }

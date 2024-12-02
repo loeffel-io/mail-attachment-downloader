@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
-	"github.com/loeffel-io/mail-downloader/search"
+	_imap "github.com/loeffel-io/mail-downloader/internal/imap"
+	_mail "github.com/loeffel-io/mail-downloader/internal/mail"
+	"github.com/loeffel-io/mail-downloader/internal/search"
 	"github.com/luabagg/orcgen/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -43,25 +45,25 @@ func main() {
 	}
 
 	// imap
-	imap := &imap{
+	imap := &_imap.Imap{
 		Username: config.Imap.Username,
 		Password: config.Imap.Password,
 		Server:   config.Imap.Server,
 		Port:     config.Imap.Port,
 	}
 
-	if err := imap.connect(); err != nil {
+	if err := imap.Connect(); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := imap.login(); err != nil {
+	if err := imap.Login(); err != nil {
 		log.Fatal(err)
 	}
 
-	imap.enableCharsetReader()
+	imap.EnableCharsetReader()
 
 	// Mailbox
-	_, err = imap.selectMailbox("INBOX")
+	_, err = imap.SelectMailbox("INBOX")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,20 +86,20 @@ func main() {
 	})
 	pdfGen.SetFullPage(true)
 
-	uids, err := imap.search(fromDate, toDate)
+	uids, err := imap.Search(fromDate, toDate)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// seqset
-	seqset := imap.createSeqSet(uids)
+	seqset := imap.CreateSeqSet(uids)
 
 	// channel
-	mailsChan := make(chan *mail)
+	mailsChan := make(chan *_mail.Mail)
 
 	// fetch messages
 	go func() {
-		if err = imap.fetchMessages(seqset, mailsChan); err != nil {
+		if err = imap.FetchMessages(seqset, mailsChan); err != nil {
 			log.Fatal(err)
 		}
 
@@ -109,7 +111,7 @@ func main() {
 	bar := pb.StartNew(len(uids))
 
 	// mails
-	mails := make([]*mail, 0)
+	mails := make([]*_mail.Mail, 0)
 
 	// fetch messages
 	for mail := range mailsChan {
@@ -129,10 +131,10 @@ func main() {
 	// process messages
 	var pdfErrors []*PdfError
 	for _, mail := range mails {
-		dir := mail.getDirectoryName(imap.Username)
+		dir := mail.GetDirectoryName(imap.Username)
 
 		if mail.Error != nil {
-			log.Println(mail.getErrorText())
+			log.Println(mail.GetErrorText())
 			bar.Increment()
 			continue
 		}
@@ -175,10 +177,10 @@ func main() {
 			continue
 		}
 
-		fileInfo, err := mail.generatePdf(pdfGen)
+		fileInfo, err := mail.GeneratePdf(pdfGen)
 		if err != nil {
 			switch err {
-			case ErrNoHtmlBody:
+			case _mail.ErrNoHtmlBody:
 				pdfErrors = append(pdfErrors, &PdfError{
 					From:    mail.From[0].Address(),
 					Date:    mail.Date,

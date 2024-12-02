@@ -1,7 +1,6 @@
 package search
 
 import (
-	"github.com/loeffel-io/mail-downloader/counter"
 	"strings"
 )
 
@@ -12,16 +11,16 @@ type Search struct {
 
 func (search *Search) Find() bool {
 	for _, row := range search.Search {
-		count := counter.CreateCounter()
+		var i int
 		split := strings.Split(row, ",")
 
 		for _, cell := range split {
 			if strings.Contains(strings.ToLower(search.Data), strings.TrimSpace(strings.ToLower(cell))) {
-				count.Increase()
+				i++
 			}
 		}
 
-		if count.Current() == len(split) {
+		if i == len(split) {
 			return true
 		}
 	}
